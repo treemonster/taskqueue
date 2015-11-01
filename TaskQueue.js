@@ -2,16 +2,14 @@
 
 let TaskQueue=module.exports={};
 
-// 任务状态值
-TaskQueue.UNKNOWN=0; // 暂时没有这个任务id
-TaskQueue.SLEEPING=1; // 存在这个任务，但是尚未执行
-TaskQueue.RUNNING=2; // 正在执行中，但尚未完毕
-TaskQueue.COMPLETED=3; // 已经完成
-
-// 创建任务队列
+// state code of task
+TaskQueue.UNKNOWN=0; // this task is not defined
+TaskQueue.SLEEPING=1; // this task is in the queue, but not actived
+TaskQueue.RUNNING=2;
+TaskQueue.COMPLETED=3;
 TaskQueue.create=(options)=>new Instance(options);
 
-//返回唯一标示
+// unique id
 let i=0,getId=()=>[i++,Math.random()].join(',');
 
 let fx=(r,d)=>{
@@ -20,17 +18,34 @@ let fx=(r,d)=>{
       r[k]=d[k];
 };
 
-// 任务队列构造器
+let fixArgs=(t,r,d)=>{
+  d=d||[];
+  r.map((c)=>{
+    for(let i=0;i<t.length;i++){
+      if(t[i].prototype!==undefined)
+        t[i]=[t[i]];
+      for(let x=t[i],j=0;j<x.length;j++)if(
+        (x[j]===String && c+''===c) ||
+        (x[j]===Function && typeof c==='function') ||
+        (x[j]===Array && c instanceof Array) || 
+        (x[j]===Object && typeof(c)==='object' && c instanceof Array===false)
+      ){d[i]=c;break;}
+    }
+  });
+  return d;
+};
+
 function Instance(options){
-  // 填充options缺省
+
+  // default options
   fx(options,{
     maxCount: 10,
     disabled: false,
     destoryIfNoTask: false
   });
 
-  let tasks={}; // 存放任务相关属性：id,state,result,tq(如果是未执行完毕的任务队列，则这一项是任务队列实例，否则为null)
-  let callbacks={}; // 任务完成时的回调函数：taskid:{id,fn}
+  let tasks={}; // place the attributes fo task: id,state,result,tq(`tq` will always set as null unless this is a child taskqueue)
+  let callbacks={}; // callbacks of tasks. taskid:{id,fn}
   let addCallback=(taskId,id,fn)=>{
     let x=callbacks[taskId]||{};
     x[id]=fn;
@@ -42,86 +57,66 @@ function Instance(options){
     if(t.state ^ TaskQueue.COMPLETED)return;
     for(let q in c)c[q].apply({},t.result),delete(c[q]);
   };
-  let queue=[],currentCount=0,currentRunning;
-  let t=setInterval(()=>{
-    if(options.disabled)return;
-    if(options.destoryIfNoTask && !this.hasTask())
-      return this.destory();
-    if(queue.length && currentCount<options.maxCount){
-      currentCount++;
-      let fq=queue.shift();
-      let taskId=fq[0],fn=fq[1];
-      let task=tasks[taskId]={
-        state:1,
-        id:taskId,
-        result:void 0,
-        tq:null
-      };
-      task.state=TaskQueue.RUNNING;
-      currentRunning=fn;
-      if(typeof fn==='function'){
-        fn((...r)=>{
-          currentCount--;
-          task.state=TaskQueue.COMPLETED;
-          task.result=r;
-          cleanCallback(taskId);
-          this.reportResult.apply({},r);
-        },(taskId)=>{
-          let o=tasks[taskId]||{state:0};
-          o.addDone=(id,callback)=>{
-            if(!callback)callback=id,id=getId();
-            addCallback(taskId,id,callback);
-          };
-          o.removeDone=(id)=>{
-            delete callbacks[taskId][id];
-          };
-          return o;
-        },this);
-      }else{
-        fn.reportResult=(...r)=>{
-          task.state=TaskQueue.RUNNING;
-          task.result=r;
-        };
-        fn.destoried=()=>{
-          currentCount--;
-          task.state=TaskQueue.COMPLETED;
-          task.tq=null;
-          cleanCallback(taskId);
-        };
-        task.tq=fn;
-        // 启动子任务队列
-        fn.run && fn.run();
-        // 如果已经destory过，则立即执行
-        fn.isDestoried && fn.destory();
-      }
+  let queue=[],currentCount=0;
+
+  // run next task
+  let _nextTick=()=>{
+    if(options.disabled || this.isDestoried)return false;
+    if(options.destoryIfNoTask && !this.hasTask()){
+      this.destory();
+      return false;
     }
-  },20);
+    if(!queue.length || currentCount>=options.maxCount)return false;
+    currentCount++;
+    let fq=queue.shift();
+    let taskId=fq[0],fn=fq[1];
+    let task=tasks[taskId]={ state:1, id:taskId, result:void 0, tq:null };
+    task.state=TaskQueue.RUNNING;
+    if(typeof fn==='function'){
+      fn((...r)=>{
+        currentCount--;
+        task.state=TaskQueue.COMPLETED;
+        task.result=r;
+        cleanCallback(taskId);
+        this.reportResult.apply({},r);
+        nextTick();
+      },(taskId)=>{
+        let o=tasks[taskId]||{state:0};
+        o.addCallback=(id,callback)=>addCallback.apply({},[taskId].concat(
+          fixArgs([String,Function],[id,callback],[getId(),()=>{}]))
+        ),o.removeCallback=(id)=>delete(callbacks[taskId][id]);
+        return o;
+      },this);
+    }else{
+      fn.reportResult=(...r)=>{
+        task.state=TaskQueue.RUNNING;
+        task.result=r;
+      };
+      fn.destoried=()=>{
+        currentCount--;
+        task.state=TaskQueue.COMPLETED;
+        task.tq=null;
+        cleanCallback(taskId);
+        nextTick();
+      };
+      task.tq=fn;
+      // run the child taskqueue
+      fn.run && fn.run(); 
+      fn.isDestoried && fn.destory();
+    }
+    return true;
+  },nextTick=()=>setTimeout(()=>{
+     while(_nextTick()===true);
+  },0);
 
-  this.isDestoried=false; // 是否已被destory过
+  this.isDestoried=false;
 
-  // 缺省参数解析器
-  let fixArgs=(t,r,d)=>{
-    d=d||[];
-    r.map((c)=>{
-      for(let i=0;i<t.length;i++){
-        if(t[i].prototype!==undefined)
-          t[i]=[t[i]];
-        for(let x=t[i],j=0;j<x.length;j++)if(
-          (x[j]===String && c+''===c) ||
-          (x[j]===Function && typeof c==='function') ||
-          (x[j]===Array && c instanceof Array) || 
-          (x[j]===Object && typeof(c)==='object' && c instanceof Array===false)
-        ){d[i]=c;break;}
-      }
-    });
-    return d;
-  };
-
+  // for normal task
   ((p)=>{
-    this.push=(id,fn)=>(queue.push(p(id,fn)),this);
-    this.unshift=(id,fn)=>(queue.unshift(p(id,fn)),this);
+    this.push=(id,fn)=>(queue.push(p(id,fn)),nextTick(),this);
+    this.unshift=(id,fn)=>(queue.unshift(p(id,fn)),nextTick(),this);
   })((id,fn)=>fixArgs([String,[Function,Object]],[id,fn],[getId()]));
-
+  // for child taskqueue
   ((p)=>{
     this.pushQueue=(id,options,handler)=>
       p('push',id,options,handler);
@@ -140,20 +135,31 @@ function Instance(options){
     return cq;
   });
 
-  if(options.disabled)this.run=()=>{options.disabled=false;this.run=undefined;};
+  // child taskqueue will NOT run until it has got the running chance from parent
+  if(options.disabled)this.run=()=>{
+    options.disabled=false;
+    delete this.run;
+    nextTick();
+  };
   this.destory=()=>{
     this.isDestoried=true;
-    clearInterval(t);
-    for(let t in tasks)
-      tasks[t].tq && tasks[t].tq.destory();
+    for(let i in tasks)
+      tasks[i].tq && tasks[i].tq.destory();
     this.destoried();
+    queue=[];
+    tasks={};
+    currentCount=0;
+    nextTick();
   };
-
   this.hasTask=()=>currentCount+queue.length;
   this.currentTask=()=>currentCount;
-  this.currentRunning=()=>currentRunning;
-  // 给自己实例的接口
-  this.reportResult=this.destoried=()=>{};
+
+  // `reportResult` and `destoried` are used for child taskqueues
+  // child taskqueue can report the result to their parent by `reportResult`
+  this.reportResult=
+  // when chlid taskqueue destoring, parent taskqueue will do something by `destoried` 
+  this.destoried=
+  ()=>{};
 
 };
 

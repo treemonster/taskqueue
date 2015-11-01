@@ -1,0 +1,25 @@
+'use strict';
+let TaskQueue=require('./TaskQueue');
+
+TaskQueue.create({maxCount:3,destoryIfNoTask:true})
+// push a task, signed as `task1`
+.push('task1',(completed)=>{
+  console.log('I am the first');
+  setTimeout(()=>completed(1,2,3,4),2000);
+})
+.push((completed,taskById)=>{
+  console.log('I am the second');
+  // when task1 is completed, do callback
+  taskById('task1').addCallback((a,b,c,d)=>{
+    console.log('>> ',a+b+c+d);
+    completed();
+  });
+})
+// jump the queue
+.unshift((completed,taskById,currentTaskQueue)=>{
+  console.log('I jump the queue and now I am the first');
+  completed();
+  // If destory the taskqueue, other SLEEPING task/taskqueue will never got chance to run
+  // currentTaskQueue.destory();
+});
+
