@@ -1,45 +1,36 @@
 'use strict';
 
 let TaskQueue=module.exports={};
+let mx=require('os').cpus().length;
+
+// get a simple taskqueue
+TaskQueue.createSimple=(options)=>new(function(){
+  fx(options=options||{},{maxCount:mx*100 });
+  let c=0,q=[],m=options.maxCount;
+  let n=()=>{
+    while(1){
+      if(c>=m || !q.length)return;
+      q.shift()(()=>{--c;n();});
+      ++c;
+    }
+  };
+  this.push=(h)=>(q.push(h),n());
+  this.hasTask=()=>q.length+c;
+  this.currentTask=()=>c;
+});
 
 // state code of task
 TaskQueue.UNKNOWN=0; // this task is not defined
 TaskQueue.SLEEPING=1; // this task is in the queue, but not actived
 TaskQueue.RUNNING=2;
 TaskQueue.COMPLETED=3;
-TaskQueue.create=(options)=>new Instance(options);
 
-// unique id
-let i=0,getId=()=>[i++,Math.random()].join(',');
-
-let fx=(r,d)=>{
-  for(let k in d)
-    if(!r.hasOwnProperty(k))
-      r[k]=d[k];
-};
-
-let fixArgs=(t,r,d)=>{
-  d=d||[];
-  r.map((c)=>{
-    for(let i=0;i<t.length;i++){
-      if(t[i].prototype!==undefined)
-        t[i]=[t[i]];
-      for(let x=t[i],j=0;j<x.length;j++)if(
-        (x[j]===String && c+''===c) ||
-        (x[j]===Function && typeof c==='function') ||
-        (x[j]===Array && c instanceof Array) || 
-        (x[j]===Object && typeof(c)==='object' && c instanceof Array===false)
-      ){d[i]=c;break;}
-    }
-  });
-  return d;
-};
-
-function Instance(options){
+// use more memeory but support completed jobs
+TaskQueue.create=(options)=>new(function(options){
 
   // default options
-  fx(options,{
-    maxCount: 10,
+  fx(options=options||{},{
+    maxCount: mx*100 ,
     disabled: false,
     destoryIfNoTask: false
   });
@@ -160,8 +151,31 @@ function Instance(options){
   // when chlid taskqueue destoring, parent taskqueue will do something by `destoried` 
   this.destoried=
   ()=>{};
+});
 
+// unique id
+let i=0,getId=()=>[i++,Math.random()].join(',');
+
+let fx=(r,d)=>{
+  for(let k in d)
+    if(!r.hasOwnProperty(k))
+      r[k]=d[k];
 };
 
-
+let fixArgs=(t,r,d)=>{
+  d=d||[];
+  r.map((c)=>{
+    for(let i=0;i<t.length;i++){
+      if(t[i].prototype!==undefined)
+        t[i]=[t[i]];
+      for(let x=t[i],j=0;j<x.length;j++)if(
+        (x[j]===String && c+''===c) ||
+        (x[j]===Function && typeof c==='function') ||
+        (x[j]===Array && c instanceof Array) || 
+        (x[j]===Object && typeof(c)==='object' && c instanceof Array===false)
+      ){d[i]=c;break;}
+    }
+  });
+  return d;
+};
 

@@ -1,6 +1,6 @@
 {
   "name": "taskqueue",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "async callbacks task queue",
   "main": "index.js",
   "dependencies": {},
@@ -15,33 +15,10 @@
   "keywords": [
     "taskqueue"
   ],
-  "author": {
-    "name": "treemonster"
-  },
+  "author": "treemonster",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/treemonster/taskqueue/issues"
   },
-  "homepage": "https://github.com/treemonster/taskqueue#readme",
-  "_id": "taskqueue@0.2.0",
-  "_shasum": "e7221b7d88877be03f0b2b4933624de1c9e07b9e",
-  "_from": "taskqueue@0.2.0",
-  "_npmVersion": "3.3.10",
-  "_nodeVersion": "4.2.1",
-  "_npmUser": {
-    "name": "treemonster",
-    "email": "1696292264@qq.com"
-  },
-  "dist": {
-    "shasum": "e7221b7d88877be03f0b2b4933624de1c9e07b9e",
-    "tarball": "http://registry.npmjs.org/taskqueue/-/taskqueue-0.2.0.tgz"
-  },
-  "maintainers": [
-    {
-      "name": "treemonster",
-      "email": "1696292264@qq.com"
-    }
-  ],
-  "directories": {},
-  "_resolved": "https://registry.npmjs.org/taskqueue/-/taskqueue-0.2.0.tgz"
+  "homepage": "https://github.com/treemonster/taskqueue#readme"
 }
